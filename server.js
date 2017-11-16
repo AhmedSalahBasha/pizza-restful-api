@@ -14,35 +14,21 @@ var server = app.listen(port, function () {
 });
 
 //============== Connecting to SQLite3 ==================
-// Open Connection
+// Function to Open Connection
 const sqlite3 = require('sqlite3').verbose();
+
 var db = new sqlite3.Database(':memory:', function (err) {
     if (err) {
         return console.error(err.message);
     }
-    console.log("Conncted to the In-Memory SQLite Database.");
+    console.log("Database connection is opened.");
 });
-
-// Close Connection
-function close() {
-    db.close(function (err) {
-        if (err) {
-            return console.error(err.message);
-        }
-        console.log('Close the database connection.');
-    });
-}
 
 //================= CREATING DB MODELS ==================
 //----------------- PIZZA TABLE -------------------------
 
 db.serialize(function () {
-    // CREATE size TABLE
-    //db.run("CREATE TABLE IF NOT EXISTS Size (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price REAL NOT NULL)");
-    // INSERT DEFAULT VALUES IN size TABLE
-    //db.run("INSERT INTO Size (name, price) VALUES ('Standard', 5)");
-    //db.run("INSERT INTO Size (name, price) VALUES ('Large', 8.5)");
-    // -----------
+
     // CREATE topping TABLE
     db.run(`CREATE TABLE IF NOT EXISTS 
             Topping 
@@ -76,6 +62,7 @@ db.serialize(function () {
                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                 totalPrice REAL NOT NULL, 
                 recipient TEXT NOT NULL)`);
+
 });
 
 var Size = {
@@ -147,13 +134,12 @@ app.get('/pizza/:pizzaId', function (req, res) {
 
 // -------------- PUT BY ID | Pizza -----------------
 app.put('/pizza/:pizzaId', function (req, res) {
-
     var sizePrice = getPriceBySize(req.body.size);
     if (sizePrice == 0) {
         return res.status(404).send("Invalid pizza supplied");
     }
 
-    db.all("SELECT * FROM Pizza WHERE Pizza.id = ?", [req.params.pizzaId], function (err, row) {
+    db.each("SELECT * FROM Pizza WHERE Pizza.id = ?", [req.params.pizzaId], function (err, row) {
         if (row.length == 0) { return res.status(404).send("Pizza could not be found") }
         else {
             db.run("UPDATE Pizza SET name = ?, price = ?, size = ? WHERE id = ?", [req.body.name, sizePrice, req.body.size, req.params.pizzaId],
@@ -173,7 +159,7 @@ app.delete('/pizza/:pizzaId', function (req, res) {
             if (row.length == 0) { return res.status(404).send("Pizza not found") }
             else {
                 db.run("DELETE FROM Pizza WHERE id = ?", [req.params.pizzaId],
-                    function (err, rowid) {
+                    function (err) {
                         if (err) {
                             return res.status(400).send("Invalid ID supplied");
                         }
@@ -189,7 +175,6 @@ app.delete('/pizza/:pizzaId', function (req, res) {
 
 // ------------- POST | Topping --------------------------
 app.post('/pizza/:pizzaId/topping', function (req, res) {
-
     var pizzaOldPrice;
     db.all("SELECT price FROM Pizza WHERE Pizza.id = ?", [req.params.pizzaId], function (err, row) {
         if (row.length == 0) { return res.status(404).send("Invalid input") }
@@ -258,7 +243,6 @@ app.get('/pizza/:pizzaId/topping/:toppingId', function (req, res) {
 */
 // -------------- DELETE BY ID | Topping -----------------
 app.delete('/pizza/:pizzaId/topping/:toppingId', function (req, res) {
-
     var toppingPrice;
     var pizzaPrice;
     var newPrice;
@@ -305,7 +289,6 @@ app.delete('/pizza/:pizzaId/topping/:toppingId', function (req, res) {
 
 // ------------- POST | Order --------------------------
 app.post('/order', function (req, res) {
-
     // email validation
 
     function validateEmail(email) {
@@ -488,5 +471,4 @@ app.delete('/order/:orderId', function (req, res) {
                 }
             });
     }
-
 });
