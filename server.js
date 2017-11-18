@@ -1,9 +1,10 @@
 var app = require('./app');
 var port = process.env.PORT || 3000;
 
+
 var express = require('express');
 var async = require("async");
-//var router = express.Router();
+
 var bodyParser = require('body-parser');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -65,6 +66,8 @@ db.serialize(function () {
 
 });
 
+//console.log(os.hostname);
+
 var Size = {
     Standard: { price: 5, name: "Standard", code: "S" },
     Large: { price: 8.5, name: "Large", code: "L" }
@@ -102,7 +105,7 @@ app.post('/pizza', function (req, res) {
     db.run("INSERT INTO Pizza (name, price, size) VALUES (?, ?, ?)", [req.body.name, sizePrice, req.body.size],
         function (err) {
             if (err) { return res.status(400).send("Invalid input"); }
-            res.location(`/pizza/${this.lastID}`);
+            res.location(req.get('host') + `/pizza/${this.lastID}`);
             res.status(201).send("Created new pizza");
             //console.log(`A row has been inserted with rowid ${this.lastID}`);
         });
@@ -192,14 +195,15 @@ app.post('/pizza/:pizzaId/topping', function (req, res) {
                             var newPrice = parseFloat(req.body.price) + parseFloat(pizzaOldPrice);
                             db.run("UPDATE Pizza SET price = ? WHERE id = ?", [newPrice, req.params.pizzaId],
                                 function (err) {
-                                    if (err) { return res.status(400).send("Invalid input" + err.message); }
+                                    if (err) { 
+                                        return res.status(400).send("Invalid input" + err.message); 
+                                    }
                                     else {
-                                        res.location(`/pizza/` + req.params.pizzaId + `/topping/${this.lastID}`);
+                                        res.location(req.get('host') + `/pizza/` + req.params.pizzaId + `/topping/${this.lastID}`);
                                         res.status(201).send("Created new topping for pizza.");
                                     }
                                 });
                         }
-                        //console.log(`A row has been inserted with rowid ${this.lastID}`);
                     });
             }
         }
@@ -322,7 +326,7 @@ app.post('/order', function (req, res) {
                     }
                     else {
                         orderId = `${this.lastID}`;
-                        res.location(`/order/${this.lastID}`);
+                        res.location(req.get('host') + `/order/${this.lastID}`);
                         callback();
                     }
                 })
