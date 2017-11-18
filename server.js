@@ -180,11 +180,11 @@ app.delete('/pizza/:pizzaId', function (req, res) {
 app.post('/pizza/:pizzaId/topping', function (req, res) {
     var pizzaOldPrice;
     db.all("SELECT price FROM Pizza WHERE Pizza.id = ?", [req.params.pizzaId], function (err, row) {
-        if (row.length == 0) { return res.status(404).send("Invalid input") }
+        if (row.length == 0) { return res.status(404).send("No pizzaz found.") }
         else {
             pizzaOldPrice = row[0].price;
             if (isNaN(req.body.price)) {
-                return res.status(400).send("Invalid Price supplied");
+                return res.status(400).send("Invalid input");
             }
             else {
                 db.run("INSERT INTO Topping (name, price, pizzaId) VALUES (?, ?, ?)", [req.body.name, req.body.price, req.params.pizzaId],
@@ -247,25 +247,22 @@ app.get('/pizza/:pizzaId/topping/:toppingId', function (req, res) {
 */
 // -------------- DELETE BY ID | Topping -----------------
 app.delete('/pizza/:pizzaId/topping/:toppingId', function (req, res) {
-    var toppingPrice;
-    var pizzaPrice;
-    var newPrice;
+    var toppingPrice = 0;
+    var pizzaPrice = 0;
+    var newPrice = 0;
     db.all("SELECT price FROM Topping WHERE id = ?", [req.params.toppingId], function (err, row) {
         if (row.length == 0) {
             return res.status(404).send("Topping not found");
         }
         else {
             toppingPrice = row[0].price;
-            //console.log("toppingPrice =  " + toppingPrice);
             db.all("SELECT price FROM Pizza WHERE id = ?", [req.params.pizzaId], function (err, row) {
                 if (row.length == 0) {
                     return res.status(404).send("Pizza not found");
                 }
                 else {
-                    //pizzaPrice = row[0].price;
-                    console.log("pizzaPrice =  " + pizzaPrice);
-                    //newPrice = parseFloat(pizzaPrice) - parseFloat(toppingPrice);
-                    console.log("newPrice =  " + newPrice);
+                    pizzaPrice = row[0].price;
+                    newPrice = parseFloat(pizzaPrice) - parseFloat(toppingPrice);
                     db.all("SELECT * FROM Topping WHERE Topping.pizzaId = ? AND Topping.id = ?", [req.params.pizzaId, req.params.toppingId],
                         function (err, row) {
                             if (row.length == 0) { return res.status(404).send("Pizza or Topping not be found") }
@@ -344,33 +341,45 @@ app.post('/order', function (req, res) {
                 async.waterfall([
                     function (callback) {
                         //console.log(i + "callback");
-                        db.each("SELECT price FROM Pizza WHERE id = ?", [pizzaId], function (err, row) {
+                        db.each("SELECT price FROM Pizza WHERE id = ?", [pizzaId], function (err, pizzaRow) {
                             if (err) {
                                 return res.status(400).send("Invalid order" + err.message);
                             }
                             else {
                                 //console.log(">> inside 'SELECT price FROM Pizza'");
-                                pizzaPrice = row.price;
+                                pizzaPrice = pizzaRow.price;
                                 console.log("pizzaPrice :  " + pizzaPrice);
-                                callback();
+                                callback(err, pizzaRow);
                             }
                         });
                     },
-                    function (callback) {
+                    function (pizzaRow, callback) {
                         //console.log(i + "callback");
-                        db.each("SELECT totalPrice FROM Orders WHERE id = ?", [orderId], function (err, row) {
+                        db.each("SELECT totalPrice FROM Orders WHERE id = ?", [orderId], function (err, totalPriceRow) {
                             if (err) {
                                 return res.status(400).send("Invalid order" + err.message);
                             }
                             else {
-                                //currentTotalPrice = row.totalPrice;
+                                currentTotalPrice = totalPriceRow.totalPrice;
 
-
-                                totalPrice = parseFloat(currentTotalPrice) + (parseFloat(pizzaPrice) * parseFloat(quantity));
-                                currentTotalPrice = totalPrice;
+                                totalPrice = parseFloat(currentTotalPrice) + (parseFloat(pizzaRow.price) * parseFloat(quantity));
+                                //currentTotalPrice = totalPrice;
                                 console.log("currentTotalPrice :  " + currentTotalPrice);
                                 console.log("totalPrice :  " + totalPrice);
-                                callback();
+                                callback(err, totalPriceRow);
+                            }
+                        });
+                    },
+                    function (totalPriceRow, callback) {
+                        //console.log(i + "callback");
+                        totalPrice = totalPriceRow.totalPrice;
+                        db.run("UPDATE Orders SET totalPrice = ? WHERE id = ?", [totalPrice, orderId], function (err) {
+                            if (err) {
+                                return res.status(400).send("Invalid order" + err.message);
+                            }
+                            else {
+                                console.log("totalPrice Updated successfully!");
+                                itemcallback();
                             }
                         });
                     },
@@ -387,18 +396,6 @@ app.post('/order', function (req, res) {
                                 }
                             }
                         );
-                    },
-                    function (callback) {
-                        //console.log(i + "callback");
-                        db.run("UPDATE Orders SET totalPrice = ? WHERE id = ?", [totalPrice, orderId], function (err) {
-                            if (err) {
-                                return res.status(400).send("Invalid order" + err.message);
-                            }
-                            else {
-                                console.log("totalPrice Updated successfully!");
-                                itemcallback();
-                            }
-                        });
                     }
                 ])
             }, function (err) {
@@ -439,11 +436,18 @@ app.get('/order/:orderId', function (req, res) {
         return res.status(400).send("Invalid ID supplied");
     }
     else {
-        var stmt = "SELECT o.id, o.totalPrice, o.recipient, oi.pizzaId, oi.quantity FROM Orders o INNER JOIN OrderItem oi on o.id = ?";
-        db.all(stmt, [req.params.orderId],
+        var stmt = `SELECT 
+                    Ordersid, Orders.totalPrice, Ordersrecipient, 
+                    OrderItem.pizzaId, OrderItem.quantity 
+                    FROM Orders 
+                    INNER JOIN OrderItem 
+                    ON OrderItem.id = ? AND Orders.id = ?`;
+        db.all("SELECT * FROM Orders, OrderItem WHERE Orders.id = ? AND OrderItem.orderId = ?", [req.params.orderId, req.params.orderId],
             function (err, row) {
-                if (row.length == 0) { return res.status(404).send("Order could not be found") }
-                if (err) {
+                if (row.length == 0) {
+                    return res.status(404).send("Order could not be found") 
+                }
+                else if (err) {
                     return res.status(500).send("Error occured at server!" + " - " + err.message);
                 }
                 else {
